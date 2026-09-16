@@ -1,0 +1,73 @@
+GET exitoso: 200 OK
+curl -i http://127.0.0.1:8000/api/projects/
+HTTP/1.1 200 OK
+Date: Wed, 16 Sep 2026 20:28:23 GMT
+Server: WSGIServer/0.2 CPython/3.14.7
+Content-Type: application/json
+Vary: Accept, Cookie
+Allow: GET, POST, HEAD, OPTIONS
+X-Frame-Options: DENY
+Content-Length: 322
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+
+POST exitoso: 201 Created
+curl -i -X POST http://127.0.0.1:8000/api/projects/ -H "Content-Type: application/json" -d "{\"name\":\"Proyecto curl\",\"description\":\"Proyecto creado desde curl\"}"
+HTTP/1.1 201 Created
+Date: Wed, 16 Sep 2026 20:28:46 GMT
+Server: WSGIServer/0.2 CPython/3.14.7
+Content-Type: application/json
+Vary: Accept, Cookie
+Allow: GET, POST, HEAD, OPTIONS
+X-Frame-Options: DENY
+Content-Length: 128
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+
+DELETE exitoso: 204 No Content
+curl -i -X DELETE http://127.0.0.1:8000/api/projects/2/
+HTTP/1.1 204 No Content
+Date: Wed, 16 Sep 2026 20:32:40 GMT
+Server: WSGIServer/0.2 CPython/3.14.7
+Vary: Accept, Cookie
+Allow: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+X-Frame-Options: DENY
+Content-Length: 0
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+
+POST inválido: 400 Bad Request
+curl -i -X POST http://127.0.0.1:8000/api/projects/ -H "Content-Type: application/json" -d "{\"description\":\"Proyecto sin nombre\"}"
+HTTP/1.1 400 Bad Request
+Date: Wed, 16 Sep 2026 20:30:24 GMT
+Server: WSGIServer/0.2 CPython/3.14.7
+Content-Type: application/json
+Vary: Accept, Cookie
+Allow: GET, POST, HEAD, OPTIONS
+X-Frame-Options: DENY
+Content-Length: 60
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+
+Recurso inexistente: 404 Not Found
+curl -i http://127.0.0.1:8000/api/tasks/999999/
+HTTP/1.1 404 Not Found
+Date: Wed, 16 Sep 2026 20:30:54 GMT
+Server: WSGIServer/0.2 CPython/3.14.7
+Content-Type: application/json
+Vary: Accept, Cookie
+Allow: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+X-Frame-Options: DENY
+Content-Length: 69
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+
+código 500
+El código 500 representa un error interno del servidor. 
+No se fuerza esta respuesta porque la API funciona correctamente
+y no corresponde introducir un bug para generar un error.
