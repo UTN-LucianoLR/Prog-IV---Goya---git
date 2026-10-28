@@ -220,3 +220,128 @@ class TaskFlowClase06And07Tests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertIn("access", res.json())
         self.assertIn("refresh", res.json())
+
+
+class TaskFlowClase08Tests(APITestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.admin_user = User.objects.create_user(
+            username="admin_user8", email="admin8@test.com", password="Password123!"
+        )
+        self.member_user = User.objects.create_user(
+            username="member_user8", email="member8@test.com", password="Password123!"
+        )
+
+    def test_login_throttling_and_security_log(self):
+        """5 intentos fallidos dan 401 y se auditan en SecurityLog; el 6to da 429 Too Many Requests."""
+        from core.models import SecurityLog
+        SecurityLog.objects.all().delete()
+
+        for _ in range(5):
+            res = self.client.post(
+                "/api/token/",
+                {"username": "admin_user8", "password": "password_incorrecta"},
+                format="json",
+            )
+            self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # El 6to intento debe ser frenado por el throttle (429)
+        res_sixth = self.client.post(
+            "/api/token/",
+            {"username": "admin_user8", "password": "password_incorrecta"},
+            format="json",
+        )
+        self.assertEqual(res_sixth.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+        # Se deben haber registrado los 5 logins fallidos en SecurityLog
+        failed_logs = SecurityLog.objects.filter(action="login_failed")
+        self.assertEqual(failed_logs.count(), 5)
+
+    def test_permission_denied_security_log(self):
+        """Acciones no autorizadas registran un evento 'permission_denied' en SecurityLog."""
+        from core.models import SecurityLog
+        SecurityLog.objects.all().delete()
+
+        project = Project.objects.create(name="Proyecto Seguridad")
+        ProjectMembership.objects.create(project=project, user=self.admin_user, role="admin")
+        ProjectMembership.objects.create(project=project, user=self.member_user, role="miembro")
+        task = Task.objects.create(
+            project=project,
+            title="Tarea de prueba",
+            due_date=date.today() + timedelta(days=2),
+            owner=self.admin_user,
+        )
+
+        # El miembro intenta modificar la tarea
+        self.client.force_authenticate(user=self.member_user)
+        res = self.client.patch(
+            f"/api/tasks/{task.id}/",
+            {"title": "Intento no autorizado"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Verificamos que se creó el registro de auditoría
+        denied_logs = SecurityLog.objects.filter(action="permission_denied", user=self.member_user)
+        self.assertEqual(denied_logs.count(), 1)
+
+    def test_task_description_sanitization(self):
+        """La descripción se sanitiza con nh3 eliminando etiquetas HTML y scripts peligrosos."""
+        project = Project.objects.create(name="Proyecto Sanitizacion")
+        ProjectMembership.objects.create(project=project, user=self.admin_user, role="admin")
+
+        self.client.force_authenticate(user=self.admin_user)
+        malicious_desc = "<script>alert('xss')</script>Texto seguro <b>con formato</b>"
+        res = self.client.post(
+            "/api/tasks/",
+            {
+                "project": project.id,
+                "title": "Tarea Sanitizada",
+                "description": malicious_desc,
+                "due_date": str(date.today() + timedelta(days=3)),
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.json()["description"], "Texto seguro con formato")
+
+    def test_cors_headers(self):
+        """Orígenes autorizados reciben el header Access-Control-Allow-Origin."""
+        self.client.force_authenticate(user=self.admin_user)
+        res_allowed = self.client.get("/api/projects/", HTTP_ORIGIN="http://localhost:3000")
+        self.assertEqual(res_allowed.get("Access-Control-Allow-Origin"), "http://localhost:3000")
+
+        res_disallowed = self.client.get("/api/projects/", HTTP_ORIGIN="http://sitio-malicioso.com")
+        self.assertIsNone(res_disallowed.get("Access-Control-Allow-Origin"))
+
+
+class TaskFlowClase09Tests(APITestCase):
+    async def test_websocket_echo_and_rejection(self):
+        """Verifica la conexión WebSocket con Daphne/Channels y el rechazo si el proyecto no existe."""
+        from channels.testing import WebsocketCommunicator
+        from channels.db import database_sync_to_async
+        from config.asgi import application
+
+        # 1. Conexión rechazada si el proyecto no existe (Tarea 5.2 de Clase 9)
+        comm_reject = WebsocketCommunicator(application, "ws/projects/999999/")
+        connected, _ = await comm_reject.connect()
+        self.assertFalse(connected)
+        await comm_reject.disconnect()
+
+        # 2. Conexión exitosa si el proyecto existe
+        project = await database_sync_to_async(Project.objects.create)(name="Proyecto Realtime")
+        try:
+            comm = WebsocketCommunicator(application, f"ws/projects/{project.id}/")
+            connected, _ = await comm.connect()
+            self.assertTrue(connected)
+
+            # Enviar mensaje y recibir echo
+            await comm.send_json_to({"mensaje": "hola desde el cliente"})
+            received = await comm.receive_json_from()
+            self.assertEqual(received, {"echo": {"mensaje": "hola desde el cliente"}})
+
+            await comm.disconnect()
+        finally:
+            await database_sync_to_async(project.delete)()
+
